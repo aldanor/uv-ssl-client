@@ -1,0 +1,9 @@
+[submodule "ext/uv_link_t"]
+	path = ext/uv_link_t
+	url = https://github.com/indutny/uv_link_t.git
+[submodule "ext/ringbuffer"]
+	path = ext/ringbuffer
+	url = https://github.com/gypkg/ringbuffer.git
+[submodule "ext/uv_ssl_t"]
+	path = ext/uv_ssl_t
+	url = https://github.com/indutny/uv_ssl_t.git
