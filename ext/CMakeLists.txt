@@ -1,3 +1,10 @@
+find_library(LIB_UV uv)
+if(NOT LIB_UV)
+    message(FATAL "libuv not found")
+else()
+    message(STATUS "Found libuv: ${LIB_UV}")
+endif()
+
 add_library(ringbuffer
     ringbuffer/ringbuffer.c)
 target_include_directories(ringbuffer PUBLIC ringbuffer)
@@ -9,7 +16,7 @@ add_library(uv_link_t
     uv_link_t/src/defaults.c)
 target_include_directories(uv_link_t PUBLIC uv_link_t/include)
 target_include_directories(uv_link_t PRIVATE uv_link_t)
-target_link_libraries(uv_link_t uv ringbuffer)
+target_link_libraries(uv_link_t ${LIB_UV} ringbuffer)
 
 add_library(uv_ssl_t
     uv_ssl_t/src/uv_ssl_t.c
