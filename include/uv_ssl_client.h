@@ -16,7 +16,7 @@ struct error : public std::runtime_error {
     error(const char* func, const char *msg);
 };
 
-void shutdown();
+void ssl_shutdown();
 
 struct client {
     client(const char* hostname, uint16_t port);

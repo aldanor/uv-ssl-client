@@ -5,7 +5,6 @@
 #include <stdexcept>
 #include <sstream>
 #include <string>
-#include <type_traits>
 
 #include <netdb.h>
 
@@ -62,35 +61,6 @@ static SSL* new_ssl() {
     return ssl;
 }
 
-enum class err_if { nonzero, negative };
-
-template<typename E, typename F, typename... Args>
-void try_call(const char *name, E&& e, err_if eif, F&& f, Args&&... args) {
-    auto err = f(std::forward<Args>(args)...);
-    bool fail =
-        (eif == err_if::nonzero && err != 0) ||
-        (eif == err_if::negative && err < 0);
-    if (fail) {
-        throw error(name, e(err));
-    }
-};
-
-template<typename F, typename... Args>
-void try_call_uv(const char *name, F&& f, Args&&... args) {
-    try_call(name, uv_err_name, err_if::negative,
-             std::forward<F>(f), std::forward<Args>(args)...);
-};
-
-template<typename F, typename... Args>
-void try_call_uv_link(const char *name, void *link, F&& f, Args&&... args) {
-    auto e = [link](int err) {
-        return uv_link_strerror(static_cast<uv_link_t*>(link), err);
-    };
-    try_call(name, e, err_if::nonzero,
-             std::forward<F>(f), std::forward<Args>(args)...);
-};
-
-
 static addrinfo* new_addrinfo(const char* hostname, uint16_t port) {
     std::ostringstream s_port;
     s_port << port;
@@ -100,8 +70,10 @@ static addrinfo* new_addrinfo(const char* hostname, uint16_t port) {
     hints.ai_socktype = SOCK_STREAM;
 
     addrinfo* addr;
-    try_call("getaddrinfo", gai_strerror, err_if::nonzero,
-             getaddrinfo, hostname, s_port.str().c_str(), &hints, &addr);
+    int err = getaddrinfo(hostname, s_port.str().c_str(), &hints, &addr);
+    if (err != 0) {
+        throw error("getaddrinfo", gai_strerror(err));
+    }
 
     return addr;
 }
@@ -114,7 +86,7 @@ error::error(const char* func, const char* msg)
     : std::runtime_error(std::string(func) + "(): " + msg)
 {}
 
-void shutdown() {
+void ssl_shutdown() {
     if (g_ssl_ctx != nullptr) {
         SSL_CTX_free(g_ssl_ctx);
     }
@@ -167,28 +139,27 @@ struct client::impl {
     }
 
     void connect(uv_loop_t* loop) {
-        try_call_uv("uv_tcp_init",
-                    uv_tcp_init, loop, &tcp);
-        try_call_uv("uv_tcp_keepalive",
-                    uv_tcp_keepalive, &tcp, 1, 180);
-        try_call_uv("uv_tcp_nodelay",
-                    uv_tcp_nodelay, &tcp, 1);
+        int err = 0;
 
+        if ((err = uv_tcp_init(loop, &tcp)) < 0) {
+            throw error("uv_tcp_init", uv_err_name(err));
+        } else if ((err = uv_tcp_keepalive(&tcp, 1, 180)) < 0) {
+            throw error("uv_tcp_keepalive", uv_err_name(err));
+        } else if ((err = uv_tcp_nodelay(&tcp, 1)) < 0) {
+            throw error("uv_tcp_nodelay", uv_err_name(err));
+        }
+
+        uv_connect_t req {};
         for (auto ai = addr; ai != nullptr; ai = ai->ai_next) {
-            try {
-                uv_connect_t req {};
-                try_call_uv("uv_tcp_connect",
-                            uv_tcp_connect, &req, &tcp, ai->ai_addr, nullptr);
+            if ((err = uv_tcp_connect(&req, &tcp, ai->ai_addr, nullptr)) >= 0) {
                 break;
-            } catch (...) {
-                if (ai->ai_next == nullptr) {
-                    throw;
-                }
+            }
+            if (ai->ai_next == nullptr) {
+                throw error("uv_tcp_connect", uv_err_name(err));
             }
         }
 
-        int err = uv_link_source_init(&source, as_stream(&tcp));
-        if (err != 0) {
+        if ((err = uv_link_source_init(&source, as_stream(&tcp))) != 0) {
             throw error("uv_link_source_init", uv_link_strerror(as_link(&source), err));
         }
         ssl_link = uv_ssl_create(loop, ssl, &err);
@@ -196,8 +167,7 @@ struct client::impl {
             throw error("uv_ssl_create", "failed to initialize SSL link");
         }
 
-        err = uv_link_observer_init(&observer);
-        if (err != 0) {
+        if ((err = uv_link_observer_init(&observer)) != 0) {
             throw error("uv_link_observer_init", uv_link_strerror(as_link(&observer), err));
         }
         observer.data = this;
@@ -210,16 +180,11 @@ struct client::impl {
             }
         };
 
-        err = uv_link_chain(as_link(&source), as_link(ssl_link));
-        if (err != 0) {
+        if ((err = uv_link_chain(as_link(&source), as_link(ssl_link))) != 0) {
             throw error("uv_link_chain", uv_link_strerror(as_link(&source), err));
-        }
-        err = uv_link_chain(as_link(ssl_link), as_link(&observer));
-        if (err != 0) {
+        } else if ((err = uv_link_chain(as_link(ssl_link), as_link(&observer))) != 0) {
             throw error("uv_link_chain", uv_link_strerror(as_link(ssl_link), err));
-        }
-        err = uv_link_read_start(as_link(&observer));
-        if (err != 0) {
+        } else if ((err = uv_link_read_start(as_link(&observer))) != 0) {
             throw error("uv_link_read_start", uv_link_strerror(as_link(&observer), err));
         }
     }
