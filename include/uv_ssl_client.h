@@ -19,15 +19,17 @@ struct error : public std::runtime_error {
 void ssl_shutdown();
 
 struct client {
+    using read_cb = std::function<void(const char *, size_t)>;
+    
     client(const char* hostname, uint16_t port);
 
     explicit client(const char* hostname)
         : client(hostname, 443)
     {}
 
-    void on_read(std::function<void(const char *, size_t)> callback);
     ~client() noexcept;
 
+    void on_read(read_cb callback);
 
     void connect(uv_loop_t* loop);
 

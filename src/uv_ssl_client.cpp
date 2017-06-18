@@ -1,7 +1,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <functional>
 #include <stdexcept>
 #include <sstream>
 #include <string>
@@ -107,8 +106,7 @@ struct client::impl {
     uv_link_source_t source {};
     uv_ssl_t* ssl_link = nullptr;
     uv_link_observer_t observer {};
-    std::function<void(const char *, size_t)> on_read_cb =
-        [](const char* buf, size_t len) {};
+    read_cb on_read_cb = [](const char* buf, size_t len) {};
 
     impl(const char* hostname, uint16_t port) {
         ssl = new_ssl();
@@ -134,7 +132,7 @@ struct client::impl {
     impl(const impl&) = delete;
     impl& operator=(const impl&) = delete;
 
-    void on_read(std::function<void(const char *, size_t)> callback) {
+    void on_read(read_cb callback) {
         on_read_cb = std::move(callback);
     }
 
@@ -194,7 +192,7 @@ client::client(const char *hostname, uint16_t port)
     : impl_(new impl(hostname, port))
 {}
 
-void client::on_read(std::function<void(const char *, size_t)> callback) {
+void client::on_read(read_cb callback) {
     impl_->on_read(std::move(callback));
 }
 
