@@ -103,6 +103,7 @@ struct client::impl {
     SSL *ssl = nullptr;
     struct addrinfo* addr = nullptr;
     uv_tcp_t tcp {};
+    uv_connect_t req {};
     uv_link_source_t source {};
     uv_ssl_t* ssl_link = nullptr;
     uv_link_observer_t observer {};
@@ -147,7 +148,6 @@ struct client::impl {
             throw error("uv_tcp_nodelay", uv_err_name(err));
         }
 
-        uv_connect_t req {};
         for (auto ai = addr; ai != nullptr; ai = ai->ai_next) {
             if ((err = uv_tcp_connect(&req, &tcp, ai->ai_addr, nullptr)) >= 0) {
                 break;
