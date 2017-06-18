@@ -1,6 +1,10 @@
+#include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <functional>
 #include <stdexcept>
 #include <sstream>
+#include <string>
 #include <type_traits>
 
 #include <netdb.h>
@@ -9,6 +13,8 @@
 #include <openssl/err.h>
 
 #include <uv.h>
+#include <uv_link_t.h>
+#include <uv_ssl_t.h>
 
 #include <uv_ssl_client.h>
 
@@ -75,6 +81,16 @@ void try_call_uv(const char *name, F&& f, Args&&... args) {
              std::forward<F>(f), std::forward<Args>(args)...);
 };
 
+template<typename F, typename... Args>
+void try_call_uv_link(const char *name, void *link, F&& f, Args&&... args) {
+    auto e = [link](int err) {
+        return uv_link_strerror(static_cast<uv_link_t*>(link), err);
+    };
+    try_call(name, e, err_if::nonzero,
+             std::forward<F>(f), std::forward<Args>(args)...);
+};
+
+
 static addrinfo* new_addrinfo(const char* hostname, uint16_t port) {
     std::ostringstream s_port;
     s_port << port;
@@ -104,10 +120,23 @@ void shutdown() {
     }
 }
 
+static uv_stream_t* as_stream(void *v) {
+    return reinterpret_cast<uv_stream_t *>(v);  // NOLINT
+}
+
+static uv_link_t* as_link(void *v) {
+    return reinterpret_cast<uv_link_t*>(v);  // NOLINT
+}
+
 struct client::impl {
     SSL *ssl = nullptr;
     struct addrinfo* addr = nullptr;
-    uv_tcp_t handle {};
+    uv_tcp_t tcp {};
+    uv_link_source_t source {};
+    uv_ssl_t* ssl_link = nullptr;
+    uv_link_observer_t observer {};
+    std::function<void(const char *, size_t)> on_read_cb =
+        [](const char* buf, size_t len) {};
 
     impl(const char* hostname, uint16_t port) {
         ssl = new_ssl();
@@ -122,6 +151,9 @@ struct client::impl {
         if (addr != nullptr) {
             freeaddrinfo(addr);
         }
+        if (ssl_link != nullptr) {
+            std::free(ssl_link);
+        }
     }
 
     impl(impl&&) noexcept = default;
@@ -130,25 +162,65 @@ struct client::impl {
     impl(const impl&) = delete;
     impl& operator=(const impl&) = delete;
 
+    void on_read(std::function<void(const char *, size_t)> callback) {
+        on_read_cb = std::move(callback);
+    }
+
     void connect(uv_loop_t* loop) {
         try_call_uv("uv_tcp_init",
-                    uv_tcp_init, loop, &handle);
+                    uv_tcp_init, loop, &tcp);
         try_call_uv("uv_tcp_keepalive",
-                    uv_tcp_keepalive, &handle, 1, 180);
+                    uv_tcp_keepalive, &tcp, 1, 180);
         try_call_uv("uv_tcp_nodelay",
-                    uv_tcp_nodelay, &handle, 1);
+                    uv_tcp_nodelay, &tcp, 1);
 
         for (auto ai = addr; ai != nullptr; ai = ai->ai_next) {
             try {
-                uv_connect_t request {};
+                uv_connect_t req {};
                 try_call_uv("uv_tcp_connect",
-                            uv_tcp_connect, &request, &handle, ai->ai_addr, nullptr);
+                            uv_tcp_connect, &req, &tcp, ai->ai_addr, nullptr);
                 break;
             } catch (...) {
                 if (ai->ai_next == nullptr) {
                     throw;
                 }
             }
+        }
+
+        int err = uv_link_source_init(&source, as_stream(&tcp));
+        if (err != 0) {
+            throw error("uv_link_source_init", uv_link_strerror(as_link(&source), err));
+        }
+        ssl_link = uv_ssl_create(loop, ssl, &err);
+        if (err != 0) {
+            throw error("uv_ssl_create", "failed to initialize SSL link");
+        }
+
+        err = uv_link_observer_init(&observer);
+        if (err != 0) {
+            throw error("uv_link_observer_init", uv_link_strerror(as_link(&observer), err));
+        }
+        observer.data = this;
+        observer.observer_read_cb = [](uv_link_observer_t* obs, ssize_t len, const uv_buf_t* buf) {
+            auto inst = reinterpret_cast<impl*>(obs->data);  // NOLINT
+            if (len > 0) {
+                inst->on_read_cb(buf->base, static_cast<size_t>(len));
+            } else if (len < 0) {
+                uv_link_close(as_link(obs), [](uv_link_t* /* link */) {});
+            }
+        };
+
+        err = uv_link_chain(as_link(&source), as_link(ssl_link));
+        if (err != 0) {
+            throw error("uv_link_chain", uv_link_strerror(as_link(&source), err));
+        }
+        err = uv_link_chain(as_link(ssl_link), as_link(&observer));
+        if (err != 0) {
+            throw error("uv_link_chain", uv_link_strerror(as_link(ssl_link), err));
+        }
+        err = uv_link_read_start(as_link(&observer));
+        if (err != 0) {
+            throw error("uv_link_read_start", uv_link_strerror(as_link(&observer), err));
         }
     }
 };
@@ -157,9 +229,12 @@ client::client(const char *hostname, uint16_t port)
     : impl_(new impl(hostname, port))
 {}
 
+void client::on_read(std::function<void(const char *, size_t)> callback) {
+    impl_->on_read(std::move(callback));
+}
+
 void client::connect(uv_loop_t *loop) {
     impl_->connect(loop);
 }
 
 }  // namespace uv_ssl
-

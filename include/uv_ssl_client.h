@@ -1,7 +1,9 @@
 #ifndef UV_SSL_CLIENT_H_
 #define UV_SSL_CLIENT_H_
 
+#include <cstddef>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <stdexcept>
 
@@ -22,6 +24,8 @@ struct client {
     explicit client(const char* hostname)
         : client(hostname, 443)
     {}
+
+    void on_read(std::function<void(const char *, size_t)> callback);
 
     void connect(uv_loop_t* loop);
 
