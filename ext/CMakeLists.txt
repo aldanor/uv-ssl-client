@@ -26,3 +26,7 @@ target_include_directories(uv_ssl_t PUBLIC uv_ssl_t/include)
 target_include_directories(uv_ssl_t PRIVATE uv_ssl_t)
 target_link_libraries(uv_ssl_t uv_link_t ssl crypto)
 depends_on_openssl(uv_ssl_t PRIVATE)
+
+add_library(http-parser
+    http-parser/http_parser.c)
+target_include_directories(http-parser PUBLIC http-parser)

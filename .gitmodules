@@ -7,3 +7,6 @@
 [submodule "ext/uv_ssl_t"]
 	path = ext/uv_ssl_t
 	url = https://github.com/indutny/uv_ssl_t.git
+[submodule "ext/http-parser"]
+	path = ext/http-parser
+	url = https://github.com/nodejs/http-parser.git
