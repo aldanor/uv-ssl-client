@@ -5,6 +5,8 @@
 #include <memory>
 #include <stdexcept>
 
+#include <uv.h>
+
 namespace uv_ssl {
 
 struct error : public std::runtime_error {
@@ -20,6 +22,12 @@ struct client {
     explicit client(const char* hostname)
         : client(hostname, 443)
     {}
+
+    void connect(uv_loop_t* loop);
+
+    void connect() {
+        connect(uv_default_loop());
+    }
 
 private:
     struct impl;

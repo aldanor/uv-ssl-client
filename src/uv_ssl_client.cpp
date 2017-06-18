@@ -1,11 +1,14 @@
 #include <cstdint>
 #include <stdexcept>
 #include <sstream>
+#include <type_traits>
 
 #include <netdb.h>
 
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+
+#include <uv.h>
 
 #include <uv_ssl_client.h>
 
@@ -53,6 +56,25 @@ static SSL* new_ssl() {
     return ssl;
 }
 
+enum class err_if { nonzero, negative };
+
+template<typename E, typename F, typename... Args>
+void try_call(const char *name, E&& e, err_if eif, F&& f, Args&&... args) {
+    auto err = f(std::forward<Args>(args)...);
+    bool fail =
+        (eif == err_if::nonzero && err != 0) ||
+        (eif == err_if::negative && err < 0);
+    if (fail) {
+        throw error(name, e(err));
+    }
+};
+
+template<typename F, typename... Args>
+void try_call_uv(const char *name, F&& f, Args&&... args) {
+    try_call(name, uv_err_name, err_if::negative,
+             std::forward<F>(f), std::forward<Args>(args)...);
+};
+
 static addrinfo* new_addrinfo(const char* hostname, uint16_t port) {
     std::ostringstream s_port;
     s_port << port;
@@ -62,10 +84,8 @@ static addrinfo* new_addrinfo(const char* hostname, uint16_t port) {
     hints.ai_socktype = SOCK_STREAM;
 
     addrinfo* addr;
-    int err = getaddrinfo(hostname, s_port.str().c_str(), &hints, &addr);
-    if (err != 0) {
-        throw error("getaddrinfo", gai_strerror(err));
-    }
+    try_call("getaddrinfo", gai_strerror, err_if::nonzero,
+             getaddrinfo, hostname, s_port.str().c_str(), &hints, &addr);
 
     return addr;
 }
@@ -87,6 +107,7 @@ void shutdown() {
 struct client::impl {
     SSL *ssl = nullptr;
     struct addrinfo* addr = nullptr;
+    uv_tcp_t handle {};
 
     impl(const char* hostname, uint16_t port) {
         ssl = new_ssl();
@@ -108,11 +129,37 @@ struct client::impl {
 
     impl(const impl&) = delete;
     impl& operator=(const impl&) = delete;
+
+    void connect(uv_loop_t* loop) {
+        try_call_uv("uv_tcp_init",
+                    uv_tcp_init, loop, &handle);
+        try_call_uv("uv_tcp_keepalive",
+                    uv_tcp_keepalive, &handle, 1, 180);
+        try_call_uv("uv_tcp_nodelay",
+                    uv_tcp_nodelay, &handle, 1);
+
+        for (auto ai = addr; ai != nullptr; ai = ai->ai_next) {
+            try {
+                uv_connect_t request {};
+                try_call_uv("uv_tcp_connect",
+                            uv_tcp_connect, &request, &handle, ai->ai_addr, nullptr);
+                break;
+            } catch (...) {
+                if (ai->ai_next == nullptr) {
+                    throw;
+                }
+            }
+        }
+    }
 };
 
 client::client(const char *hostname, uint16_t port)
     : impl_(new impl(hostname, port))
 {}
 
-}  // namespace uvsslc
+void client::connect(uv_loop_t *loop) {
+    impl_->connect(loop);
+}
+
+}  // namespace uv_ssl
 
