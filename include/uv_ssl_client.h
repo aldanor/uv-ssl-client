@@ -26,6 +26,8 @@ struct client {
     {}
 
     void on_read(std::function<void(const char *, size_t)> callback);
+    ~client() noexcept;
+
 
     void connect(uv_loop_t* loop);
 

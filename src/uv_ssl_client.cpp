@@ -202,4 +202,6 @@ void client::connect(uv_loop_t *loop) {
     impl_->connect(loop);
 }
 
+client::~client() noexcept = default;
+
 }  // namespace uv_ssl
