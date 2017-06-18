@@ -1,6 +1,8 @@
 #include <cstdint>
 #include <stdexcept>
-#include <string>
+#include <sstream>
+
+#include <netdb.h>
 
 #include <openssl/ssl.h>
 #include <openssl/err.h>
@@ -51,6 +53,23 @@ static SSL* new_ssl() {
     return ssl;
 }
 
+static addrinfo* new_addrinfo(const char* hostname, uint16_t port) {
+    std::ostringstream s_port;
+    s_port << port;
+
+    addrinfo hints {};
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+
+    addrinfo* addr;
+    int err = getaddrinfo(hostname, s_port.str().c_str(), &hints, &addr);
+    if (err != 0) {
+        throw error("getaddrinfo", gai_strerror(err));
+    }
+
+    return addr;
+}
+
 error::error(const char* msg)
     : std::runtime_error(msg)
 {}
@@ -66,16 +85,21 @@ void shutdown() {
 }
 
 struct client::impl {
-    SSL *ssl;
+    SSL *ssl = nullptr;
+    struct addrinfo* addr = nullptr;
 
-    explicit impl()
-        : ssl(new_ssl())
-    {}
+    impl(const char* hostname, uint16_t port) {
+        ssl = new_ssl();
+        addr = new_addrinfo(hostname, port);
+    }
 
     ~impl() noexcept {
         if (ssl != nullptr) {
             SSL_shutdown(ssl);
             SSL_free(ssl);
+        }
+        if (addr != nullptr) {
+            freeaddrinfo(addr);
         }
     }
 
@@ -87,7 +111,7 @@ struct client::impl {
 };
 
 client::client(const char *hostname, uint16_t port)
-    : impl_(new impl())
+    : impl_(new impl(hostname, port))
 {}
 
 }  // namespace uvsslc
