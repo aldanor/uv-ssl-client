@@ -15,7 +15,7 @@
 #include <uv_link_t.h>
 #include <uv_ssl_t.h>
 
-#include <uv_ssl_client.h>
+#include <uv_ssl/client.h>
 
 namespace uv_ssl {
 

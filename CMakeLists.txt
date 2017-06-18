@@ -19,7 +19,7 @@ endfunction()
 
 add_subdirectory(ext)
 
-add_library(uv_ssl_client src/uv_ssl_client.cpp)
+add_library(uv_ssl_client src/client.cpp)
 target_include_directories(uv_ssl_client PUBLIC include)
 target_link_libraries(uv_ssl_client uv_ssl_t ssl crypto)
 depends_on_openssl(uv_ssl_client PRIVATE)
