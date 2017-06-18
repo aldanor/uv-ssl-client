@@ -6,6 +6,7 @@
 #include <functional>
 #include <memory>
 #include <stdexcept>
+#include <string>
 
 #include <uv.h>
 
@@ -20,6 +21,7 @@ void ssl_shutdown();
 
 struct client {
     using read_cb = std::function<void(const char *, size_t)>;
+    using error_cb = std::function<void(const char *)>;
     
     client(const char* hostname, uint16_t port);
 
@@ -36,6 +38,13 @@ struct client {
     void connect() {
         connect(uv_default_loop());
     }
+
+    void write(const char* data, size_t len);
+    void write(const char* data, size_t len, error_cb on_error);
+    void write(const char* str);
+    void write(const char* str, error_cb on_error);
+    void write(const std::string& str);
+    void write(const std::string& str, error_cb on_error);
 
 private:
     struct impl;

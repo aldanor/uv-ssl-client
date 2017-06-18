@@ -1,6 +1,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
 #include <stdexcept>
 #include <sstream>
 #include <string>
@@ -99,6 +100,25 @@ static uv_link_t* as_link(void *v) {
     return reinterpret_cast<uv_link_t*>(v);  // NOLINT
 }
 
+struct write_closure {
+    client::error_cb on_error;
+    uv_link_observer_t* observer;
+
+    explicit write_closure(uv_link_observer_t* obs, client::error_cb on_error)
+        : on_error(std::move(on_error))
+        , observer(obs)
+    {}
+
+    static void check_err(write_closure* closure, int err) {
+        if (closure != nullptr && err != 0) {
+            auto on_error = closure->on_error;
+            auto error_str = uv_link_strerror(as_link(closure->observer), err);
+            delete closure;
+            on_error(error_str);
+        }
+    }
+};
+
 struct client::impl {
     SSL *ssl = nullptr;
     struct addrinfo* addr = nullptr;
@@ -186,6 +206,30 @@ struct client::impl {
             throw error("uv_link_read_start", uv_link_strerror(as_link(&observer), err));
         }
     }
+
+    void write(const char* data, size_t len) {
+        uv_buf_t buf = uv_buf_init(const_cast<char *>(data),
+                                   static_cast<unsigned int>(len));
+        uv_link_write(
+            as_link(&observer), &buf, 1, nullptr,
+            [](uv_link_t* /* link */, int /* status */, void* /* arg */) {},
+            nullptr
+        );
+    }
+
+    void write(const char* data, size_t len, error_cb on_error) {
+        uv_buf_t buf = uv_buf_init(const_cast<char *>(data),
+                                   static_cast<unsigned int>(len));
+        auto* closure = new write_closure(&observer, std::move(on_error));
+        int err = uv_link_write(
+            as_link(&observer), &buf, 1, nullptr,
+            [](uv_link_t* /* link */, int status, void* arg) {
+                write_closure::check_err(static_cast<write_closure *>(arg), status);
+            },
+            closure
+        );
+        write_closure::check_err(closure, err);
+    }
 };
 
 client::client(const char *hostname, uint16_t port)
@@ -201,5 +245,29 @@ void client::connect(uv_loop_t *loop) {
 }
 
 client::~client() noexcept = default;
+
+void client::write(const char *data, size_t len) {
+    impl_->write(data, len);
+}
+
+void client::write(const char *data, size_t len, error_cb on_error) {
+    impl_->write(data, len, std::move(on_error));
+}
+
+void client::write(const char *str) {
+    write(str, std::strlen(str));
+}
+
+void client::write(const char *str, error_cb on_error) {
+    write(str, std::strlen(str), std::move(on_error));
+}
+
+void client::write(const std::string &str) {
+    write(str.data(), str.size());
+}
+
+void client::write(const std::string &str, error_cb on_error) {
+    write(str.data(), str.size(), std::move(on_error));
+}
 
 }  // namespace uv_ssl
