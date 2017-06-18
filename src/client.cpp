@@ -109,13 +109,15 @@ struct write_closure {
         , observer(obs)
     {}
 
-    static void check_err(write_closure* closure, int err) {
+    static bool check_err(write_closure* closure, int err) {
         if (closure != nullptr && err != 0) {
             auto on_error = closure->on_error;
             auto error_str = uv_link_strerror(as_link(closure->observer), err);
             delete closure;
             on_error(error_str);
+            return false;
         }
+        return true;
     }
 };
 
@@ -224,7 +226,10 @@ struct client::impl {
         int err = uv_link_write(
             as_link(&observer), &buf, 1, nullptr,
             [](uv_link_t* /* link */, int status, void* arg) {
-                write_closure::check_err(static_cast<write_closure *>(arg), status);
+                auto* wc = static_cast<write_closure *>(arg);
+                if (!write_closure::check_err(wc, status)) {
+                    delete wc;
+                }
             },
             closure
         );
