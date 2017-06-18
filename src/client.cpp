@@ -22,7 +22,7 @@ namespace uv_ssl {
 static SSL_CTX* g_ssl_ctx = nullptr;
 
 static const char* ssl_get_error() {
-    unsigned long err = 0, e = 0;
+    uint64_t err = 0, e = 0;
     do {
         e = ERR_get_error();
         err = e != 0 ? e : err;
@@ -127,7 +127,7 @@ struct client::impl {
     uv_link_source_t source {};
     uv_ssl_t* ssl_link = nullptr;
     uv_link_observer_t observer {};
-    read_cb on_read_cb = [](const char* buf, size_t len) {};
+    read_cb on_read_cb = [](const char* /* buf */, size_t /* len */) {};
 
     impl(const char* hostname, uint16_t port) {
         ssl = new_ssl();
@@ -208,7 +208,7 @@ struct client::impl {
     }
 
     void write(const char* data, size_t len) {
-        uv_buf_t buf = uv_buf_init(const_cast<char *>(data),
+        uv_buf_t buf = uv_buf_init(const_cast<char *>(data),  // NOLINT
                                    static_cast<unsigned int>(len));
         uv_link_write(
             as_link(&observer), &buf, 1, nullptr,
@@ -218,7 +218,7 @@ struct client::impl {
     }
 
     void write(const char* data, size_t len, error_cb on_error) {
-        uv_buf_t buf = uv_buf_init(const_cast<char *>(data),
+        uv_buf_t buf = uv_buf_init(const_cast<char *>(data),  // NOLINT
                                    static_cast<unsigned int>(len));
         auto* closure = new write_closure(&observer, std::move(on_error));
         int err = uv_link_write(
