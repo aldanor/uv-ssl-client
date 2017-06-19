@@ -29,7 +29,7 @@ struct client {
         : client(hostname, 443)
     {}
 
-    ~client() noexcept;
+    virtual ~client() noexcept;
 
     void on_read(read_cb callback);
 
