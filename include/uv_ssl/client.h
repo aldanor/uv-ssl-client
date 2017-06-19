@@ -23,21 +23,13 @@ struct client {
     using read_cb = std::function<void(const char *, size_t)>;
     using error_cb = std::function<void(const char *)>;
     
-    client(const char* hostname, uint16_t port);
-
-    explicit client(const char* hostname)
-        : client(hostname, 443)
-    {}
+    explicit client(const char* hostname, uint16_t port = 443);
 
     virtual ~client() noexcept;
 
     void on_read(read_cb callback);
 
-    void connect(uv_loop_t* loop);
-
-    void connect() {
-        connect(uv_default_loop());
-    }
+    void connect(uv_loop_t* loop = nullptr);
 
     void write(const char* data, size_t len);
     void write(const char* data, size_t len, error_cb on_error);

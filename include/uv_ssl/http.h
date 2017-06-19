@@ -28,11 +28,7 @@ struct http_response {
 struct http_client : public client {
     using read_cb = std::function<void(http_response)>;
 
-    http_client(const char* hostname, uint16_t port);
-
-    explicit http_client(const char* hostname)
-        : http_client(hostname, 443)
-    {}
+    explicit http_client(const char* hostname, uint16_t port = 443);
 
     void on_read(read_cb callback);
 

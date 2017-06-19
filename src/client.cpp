@@ -246,7 +246,7 @@ void client::on_read(read_cb callback) {
 }
 
 void client::connect(uv_loop_t *loop) {
-    impl_->connect(loop);
+    impl_->connect(loop != nullptr ? loop : uv_default_loop());
 }
 
 client::~client() noexcept = default;
