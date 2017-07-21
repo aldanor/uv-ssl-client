@@ -198,6 +198,7 @@ struct client::impl {
                 inst->on_read_cb(buf->base, static_cast<size_t>(len));
             } else if (len < 0) {
                 uv_link_close(as_link(obs), [](uv_link_t* /* link */) {});
+                inst->ssl_link = nullptr;
             }
         };
 
