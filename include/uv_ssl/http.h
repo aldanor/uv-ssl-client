@@ -10,9 +10,11 @@
 namespace uv_ssl {
 
 struct http_response {
-    int status;
-    const char* buf;
-    size_t len;
+    int status = 200;
+    const char* buf = nullptr;
+    size_t len = 0;
+
+    http_response() = default;
 
     http_response(int status, const char *buf, size_t len)
         : status(status)
