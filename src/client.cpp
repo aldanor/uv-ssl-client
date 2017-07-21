@@ -184,7 +184,7 @@ struct client::impl {
             throw error("uv_link_source_init", uv_link_strerror(as_link(&source), err));
         }
         ssl_link = uv_ssl_create(loop, ssl, &err);
-        if (err != 0) {
+        if (ssl_link == nullptr || err != 0) {
             throw error("uv_ssl_create", "failed to initialize SSL link");
         }
 
