@@ -4,6 +4,7 @@ project(uv_ssl_client)
 set(CMAKE_CXX_STANDARD 11)
 
 option(UV_SSL_HTTP "Build with HTTP response parsing support." ON)
+option(UV_SSL_TESTS "Build tests." OFF)
 
 function(depends_on_openssl TARGET VISIBILITY)
     if(DEFINED OPENSSL_INCLUDE_DIR)
@@ -32,4 +33,8 @@ add_library(${LIBNAME} ${UV_SSL_SOURCES})
 target_include_directories(${LIBNAME} PUBLIC include)
 target_link_libraries(${LIBNAME} ${UV_SSL_DEPS})
 depends_on_openssl(${LIBNAME} PRIVATE)
+
+if(UV_SSL_TESTS)
+    add_subdirectory(tests)
+endif()
 
