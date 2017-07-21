@@ -32,6 +32,12 @@ static const char* ssl_get_error() {
            : "<unknown SSL error>";
 }
 
+static void ssl_check_error() {
+    if (ERR_peek_error() != 0) {
+        throw error(ssl_get_error());
+    }
+}
+
 static SSL* new_ssl(const char* hostname) {
     SSL* ssl = nullptr;
     try {
@@ -52,6 +58,7 @@ static SSL* new_ssl(const char* hostname) {
         }
         SSL_set_tlsext_host_name(ssl, hostname);
         SSL_set_connect_state(ssl);
+        ssl_check_error();
     } catch (...) {
         if (ssl != nullptr) {
             SSL_shutdown(ssl);
@@ -199,6 +206,7 @@ struct client::impl {
             } else if (len < 0) {
                 uv_link_close(as_link(obs), [](uv_link_t* /* link */) {});
                 inst->ssl_link = nullptr;
+                ssl_check_error();
             }
         };
 
@@ -209,6 +217,8 @@ struct client::impl {
         } else if ((err = uv_link_read_start(as_link(&observer))) != 0) {
             throw error("uv_link_read_start", uv_link_strerror(as_link(&observer), err));
         }
+
+        ssl_check_error();
     }
 
     void write(const char* data, size_t len) {
