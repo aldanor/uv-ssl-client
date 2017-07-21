@@ -10,3 +10,6 @@
 [submodule "ext/http-parser"]
 	path = ext/http-parser
 	url = https://github.com/nodejs/http-parser.git
+[submodule "tests/catch"]
+	path = tests/catch
+	url = https://github.com/philsquared/Catch.git
