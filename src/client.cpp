@@ -32,7 +32,7 @@ static const char* ssl_get_error() {
            : "<unknown SSL error>";
 }
 
-static SSL* new_ssl() {
+static SSL* new_ssl(const char* hostname) {
     SSL* ssl = nullptr;
     try {
         if (g_ssl_ctx == nullptr) {
@@ -50,6 +50,7 @@ static SSL* new_ssl() {
         if (ssl == nullptr) {
             throw error("SSL_new", ssl_get_error());
         }
+        SSL_set_tlsext_host_name(ssl, hostname);
         SSL_set_connect_state(ssl);
     } catch (...) {
         if (ssl != nullptr) {
@@ -132,7 +133,7 @@ struct client::impl {
     read_cb on_read_cb = [](const char* /* buf */, size_t /* len */) {};
 
     impl(const char* hostname, uint16_t port) {
-        ssl = new_ssl();
+        ssl = new_ssl(hostname);
         addr = new_addrinfo(hostname, port);
     }
 
